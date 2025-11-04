@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
+// const MRMS_BASE_URL = 'https://mrms.ncep.noaa.gov/2D/HAWAII/ReflectivityAtLowestAltitude/';
 const MRMS_BASE_URL = 'https://mrms.ncep.noaa.gov/2D/ReflectivityAtLowestAltitude/';
 const LATEST_FILE_NAME = 'MRMS_ReflectivityAtLowestAltitude.latest.grib2.gz';
 

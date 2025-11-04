@@ -22,10 +22,36 @@ const MapComponent = dynamic(() => import('./MapComponent'), {
 
 export default function RadarVisualization({ className }: RadarVisualizationProps) {
   const [radarData, setRadarData] = useState<RadarDataPoint[]>([]);
+  const [filteredRadarData, setFilteredRadarData] = useState<RadarDataPoint[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Filter controls
+  const [minThreshold, setMinThreshold] = useState(-30);
+  const [maxThreshold, setMaxThreshold] = useState(100);
+  const [isFilterEnabled, setIsFilterEnabled] = useState(false);
+
+  // Filter radar data based on threshold values
+  useEffect(() => {
+    if (!isFilterEnabled) {
+      setFilteredRadarData(radarData);
+      return;
+    }
+
+    const filtered = radarData.filter(point => 
+      point.value >= minThreshold && point.value <= maxThreshold
+    );
+    setFilteredRadarData(filtered);
+  }, [radarData, minThreshold, maxThreshold, isFilterEnabled]);
+
+  // Calculate data statistics for better slider ranges
+  const dataStats = radarData.length > 0 ? {
+    min: Math.min(...radarData.map(p => p.value)),
+    max: Math.max(...radarData.map(p => p.value)),
+    count: radarData.length
+  } : { min: -30, max: 100, count: 0 };
 
   const downloadAndProcessRadarData = async () => {
     setIsLoading(true);
@@ -219,7 +245,12 @@ export default function RadarVisualization({ className }: RadarVisualizationProp
               <div className="w-2 h-2 rounded-full bg-blue-500"></div>
               <span className="font-medium text-slate-700 dark:text-slate-300">Data Points:</span>
               <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-2 py-1 rounded font-medium">
-                {radarData.length.toLocaleString()}
+                {isFilterEnabled ? filteredRadarData.length.toLocaleString() : radarData.length.toLocaleString()}
+                {isFilterEnabled && (
+                  <span className="text-xs opacity-75 ml-1">
+                    / {radarData.length.toLocaleString()}
+                  </span>
+                )}
               </span>
             </div>
             
@@ -242,6 +273,138 @@ export default function RadarVisualization({ className }: RadarVisualizationProp
           </div>
         </div>
 
+        {/* Interactive Filter Controls */}
+        {radarData.length > 0 && (
+          <div className="bg-white dark:bg-slate-800 px-6 py-4 border-b border-slate-200 dark:border-slate-600">
+            <div className="flex flex-col gap-4">
+              {/* Filter Toggle */}
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isFilterEnabled}
+                    onChange={(e) => setIsFilterEnabled(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                  />
+                  <span className="font-medium text-slate-700 dark:text-slate-300">
+                    Enable Reflectivity Filtering
+                  </span>
+                </label>
+                {isFilterEnabled && (
+                  <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-2 py-1 rounded">
+                    Active
+                  </span>
+                )}
+              </div>
+
+              {/* Slider Controls */}
+              {isFilterEnabled && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Minimum Threshold */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        Minimum dBZ
+                      </label>
+                      <span className="text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-2 py-1 rounded font-mono">
+                        {minThreshold.toFixed(1)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 w-8">
+                        {dataStats.min.toFixed(0)}
+                      </span>
+                      <input
+                        type="range"
+                        min={dataStats.min}
+                        max={dataStats.max}
+                        step="0.5"
+                        value={minThreshold}
+                        onChange={(e) => setMinThreshold(parseFloat(e.target.value))}
+                        className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 slider-green"
+                      />
+                      <span className="text-xs text-slate-500 dark:text-slate-400 w-8">
+                        {dataStats.max.toFixed(0)}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      Light precipitation and above
+                    </div>
+                  </div>
+
+                  {/* Maximum Threshold */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        Maximum dBZ
+                      </label>
+                      <span className="text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-2 py-1 rounded font-mono">
+                        {maxThreshold.toFixed(1)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 w-8">
+                        {dataStats.min.toFixed(0)}
+                      </span>
+                      <input
+                        type="range"
+                        min={dataStats.min}
+                        max={dataStats.max}
+                        step="0.5"
+                        value={maxThreshold}
+                        onChange={(e) => setMaxThreshold(parseFloat(e.target.value))}
+                        className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 slider-red"
+                      />
+                      <span className="text-xs text-slate-500 dark:text-slate-400 w-8">
+                        {dataStats.max.toFixed(0)}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      Heavy precipitation and below
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Preset Buttons */}
+              {isFilterEnabled && (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => { setMinThreshold(-10); setMaxThreshold(100); }}
+                    className="text-xs bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:hover:bg-green-900/50 text-green-800 dark:text-green-300 px-3 py-1 rounded transition-colors"
+                  >
+                    Light Rain+ (≥-10 dBZ)
+                  </button>
+                  <button
+                    onClick={() => { setMinThreshold(20); setMaxThreshold(100); }}
+                    className="text-xs bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:hover:bg-yellow-900/50 text-yellow-800 dark:text-yellow-300 px-3 py-1 rounded transition-colors"
+                  >
+                    Moderate Rain+ (≥20 dBZ)
+                  </button>
+                  <button
+                    onClick={() => { setMinThreshold(35); setMaxThreshold(100); }}
+                    className="text-xs bg-orange-100 hover:bg-orange-200 dark:bg-orange-900/30 dark:hover:bg-orange-900/50 text-orange-800 dark:text-orange-300 px-3 py-1 rounded transition-colors"
+                  >
+                    Heavy Rain+ (≥35 dBZ)
+                  </button>
+                  <button
+                    onClick={() => { setMinThreshold(50); setMaxThreshold(100); }}
+                    className="text-xs bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-red-800 dark:text-red-300 px-3 py-1 rounded transition-colors"
+                  >
+                    Severe Weather (≥50 dBZ)
+                  </button>
+                  <button
+                    onClick={() => { setMinThreshold(dataStats.min); setMaxThreshold(dataStats.max); }}
+                    className="text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 px-3 py-1 rounded transition-colors"
+                  >
+                    Reset All
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Error Display */}
         {error && (
           <div className="mx-6 mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
@@ -259,7 +422,7 @@ export default function RadarVisualization({ className }: RadarVisualizationProp
 
         {/* Map Container */}
         <div className="h-[600px] relative bg-slate-100 dark:bg-slate-900">
-          <MapComponent radarData={radarData} />
+          <MapComponent radarData={filteredRadarData} />
         </div>
 
         {/* Statistics */}

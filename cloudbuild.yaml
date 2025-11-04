@@ -1,9 +1,9 @@
 substitutions:
   _MY_TAG: latest
   _APPLICATION_NAME: radar-viz
-  _PROJECT_ID: YOUR_GCP_PROJECT_ID
+  _PROJECT_ID: valued-amp-385315
   _REGION: us-central1
-  _SERVICE_ACCOUNT: YOUR_SERVICE_ACCOUNT_EMAIL
+  _SERVICE_ACCOUNT: 162386014034-compute@developer.gserviceaccount.com
 steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:

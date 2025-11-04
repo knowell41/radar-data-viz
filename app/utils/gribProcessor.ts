@@ -56,8 +56,8 @@ export class SimpleGribProcessor {
         console.log('📦 File is gzipped, decompressing...');
         try {
           const decompressed = inflate(uint8Array);
-          console.log(`✅ Successfully decompressed ${uint8Array.length} bytes to ${decompressed.length} bytes`);
-          buffer = decompressed.buffer;
+          console.log(`✅ Successfully decompressed ${uint8Array.length} bytes to ${decompressed.byteLength} bytes`);
+          buffer = decompressed.buffer.slice(decompressed.byteOffset, decompressed.byteOffset + decompressed.byteLength);
         } catch (error) {
           console.error('❌ Failed to decompress gzipped file:', error);
           return this.generateSampleData();
@@ -117,7 +117,25 @@ export class SimpleGribProcessor {
             const di = dataView.getUint32(offset + 63) / 1000000; // i direction increment
             const dj = dataView.getUint32(offset + 67) / 1000000; // j direction increment
             
+            // Check scanning mode and other flags
+            const scanningMode = dataView.getUint8(offset + 71);
+            const scanningFlags = {
+              iNegative: (scanningMode & 0x80) !== 0,  // i direction scanning
+              jPositive: (scanningMode & 0x40) !== 0,  // j direction scanning  
+              consecutive: (scanningMode & 0x20) !== 0  // consecutive points in i or j direction
+            };
+            
             console.log(`Grid: ${ni}x${nj}, from ${la1},${lo1} to ${la2},${lo2}`);
+            console.log(`🔍 Grid increments: di=${di}, dj=${dj}`);
+            console.log(`🧭 Scanning mode: ${scanningMode.toString(16)}, flags:`, scanningFlags);
+            console.log(`📍 Expected Hawaii coordinates: lat ~19-22°N, lon ~154-162°W`);
+            
+            // Check if this looks like Hawaii data
+            const isHawaiiData = la1 > 15 && la1 < 30 && lo1 > 180 && lo1 < 220;
+            if (isHawaiiData) {
+              console.log(`🌺 Detected Hawaii dataset - special coordinate handling needed`);
+              console.log(`🔍 Using grid definition method (template 0) - no explicit coordinates stored`);
+            }
             
             // Find the data section (Section 7)
             let dataOffset = offset + sectionLength;
@@ -167,13 +185,21 @@ export class SimpleGribProcessor {
                 };
                 console.log(`📍 Latitude coverage: ${latCoverage.north.toFixed(1)}°N to ${latCoverage.south.toFixed(1)}°N (center: ${latCoverage.center.toFixed(1)}°N)`);
                 
-                // Alternative approach: Render ALL points with significant precipitation
-                // and sample the rest. This gives better detail where it matters.
-                const significantPrecipitationPoints: RadarDataPoint[] = [];
-                const sampledBackgroundPoints: RadarDataPoint[] = [];
+                // SIMPLIFIED APPROACH: Process ALL valid data points without filtering
+                // This will show us exactly what's in the Hawaii GRIB file
+                const allDataPoints: RadarDataPoint[] = [];
                 
-                for (let row = 0; row < nj; row += rowStep) {
-                  for (let col = 0; col < ni; col += colStep) {
+                console.log(`🔍 Processing ALL data points without filtering...`);
+                console.log(`Grid parameters: ni=${ni}, nj=${nj}, la1=${la1}, la2=${la2}, lo1=${lo1}, lo2=${lo2}`);
+                
+                // Sample every N-th point across the entire grid to get good coverage
+                const sampleRowStep = Math.max(1, Math.floor(nj / 200)); // Sample 200 rows
+                const sampleColStep = Math.max(1, Math.floor(ni / 200)); // Sample 200 columns
+                
+                console.log(`� Sampling: every ${sampleRowStep} rows, every ${sampleColStep} columns`);
+                
+                for (let row = 0; row < nj; row += sampleRowStep) {
+                  for (let col = 0; col < ni; col += sampleColStep) {
                     const i = row * ni + col;
                     if (i >= valuesToRead) break;
                     
@@ -181,8 +207,16 @@ export class SimpleGribProcessor {
                       // Read 16-bit value and convert to dBZ
                       const rawValue = dataView.getUint16(dataStartOffset + i * 2, false);
                       
+                      // **DEBUG: Log first few samples**
+                      if (row < 5 && col < 5) {
+                        console.log(`🔍 Sample: row=${row}, col=${col}, i=${i}, rawValue=${rawValue}`);
+                      }
+                      
                       // Skip missing/invalid data markers
                       if (rawValue === 0 || rawValue === 65535 || rawValue === 32767) {
+                        if (row < 5 && col < 5) {
+                          console.log(`⏭️  Skipping missing/invalid data marker: ${rawValue}`);
+                        }
                         continue;
                       }
                       
@@ -196,74 +230,90 @@ export class SimpleGribProcessor {
                         dbzValue = rawValue / 100.0;
                       }
                       
-                      // **DEBUG: Let's see what values we're getting across different latitudes**
-                      if (row % 500 === 0 && col % 500 === 0) {
-                        // Log sample values from different regions for debugging
-                        let debugLat;
-                        if (la1 > la2) {
-                          debugLat = la1 - row * Math.abs(dj);
-                        } else {
-                          debugLat = la1 + row * Math.abs(dj);
-                        }
-                        console.log(`🔍 Debug sample: row=${row}, rawValue=${rawValue}, dbzValue=${dbzValue.toFixed(1)}, lat=${debugLat.toFixed(1)}°N`);
-                      }
+                      // **NO FILTERING** - Include all valid data points
                       
-                      // **RELAXED FILTERING** - Let's include more data points to see geographic distribution
-                      // Instead of only including -10 to 75 dBZ, let's be more permissive
-                      if (dbzValue < -30 || dbzValue > 100) {
-                        continue;
-                      }
+                      // Calculate lat/lng using GRIB2 scanning mode and grid definition
+                      // This is the standard method - GRIB2 stores grid parameters, not individual coordinates
                       
-                      // Calculate lat/lng - FIXED North-to-South handling
+                      // For latitude: Use scanning flags to determine direction
                       let lat;
-                      if (la1 > la2) {
-                        // Grid runs North to South (54.995 to 20.005)
-                        lat = la1 - row * Math.abs(dj);
+                      if (scanningFlags.jPositive) {
+                        // j increases from South to North
+                        lat = la1 + row * Math.abs((la2 - la1) / (nj - 1));
                       } else {
-                        // Grid runs South to North  
-                        lat = la1 + row * Math.abs(dj);
+                        // j increases from North to South (most common)
+                        lat = la1 - row * Math.abs((la1 - la2) / (nj - 1));
                       }
                       
-                      // Calculate longitude with 0-360° to -180/+180° conversion
-                      let lng = lo1 + col * di;
+                      // For longitude: Use scanning flags to determine direction
+                      let lng;
+                      if (scanningFlags.iNegative) {
+                        // i increases from East to West
+                        lng = lo1 - col * Math.abs((lo1 - lo2) / (ni - 1));
+                      } else {
+                        // i increases from West to East (most common)
+                        lng = lo1 + col * Math.abs((lo2 - lo1) / (ni - 1));
+                      }
+                      
+                      // Convert 0-360° longitude to -180/+180°
                       if (lng > 180) {
                         lng = lng - 360;
                       }
                       
-                      // Validate coordinates for North America
-                      if (lat >= 15 && lat <= 70 && lng >= -170 && lng <= -50) {
-                        const point = { lat, lng, value: dbzValue };
-                        
-                        // **RELAXED CATEGORIZATION** - Include more background data
-                        const isSignificant = dbzValue >= -5; // Lower threshold to include light precipitation
-                        
-                        if (isSignificant) {
-                          // Significant precipitation - always include
-                          significantPrecipitationPoints.push(point);
-                        } else {
-                          // Light precipitation or background - sampled
-                          sampledBackgroundPoints.push(point);
-                        }
-                        
-                        // **Track total points to prevent browser overload** 
-                        const totalPoints = significantPrecipitationPoints.length + sampledBackgroundPoints.length;
-                        if (totalPoints >= 50000) {
-                          console.log(`⚠️  Reached 50,000 point limit (${totalPoints} points), stopping sampling`);
-                          // We'll break out by returning the current data
-                        }
+                      // Debug coordinate calculation for first few points
+                      if (row < 5 && col < 5) {
+                        console.log(`🔍 Coord calc: row=${row}, col=${col} → lat=${lat.toFixed(3)}, lng=${lng.toFixed(3)}, dbz=${dbzValue.toFixed(1)}`);
+                      }
+                      
+                      // **NO COORDINATE OR VALUE FILTERING** - Accept all calculated points
+                      const point = { lat, lng, value: dbzValue };
+                      allDataPoints.push(point);
+                      
+                      // **Track total points to prevent browser overload** 
+                      if (allDataPoints.length >= 5000) {
+                        console.log(`⚠️  Reached 5,000 point limit, stopping sampling`);
+                        break;
                       }
                     } catch (err) {
                       // Skip problematic values
                       continue;
                     }
                   }
+                  
+                  // Break out of outer loop too if we hit the limit
+                  if (allDataPoints.length >= 10000) {
+                    break;
+                  }
                 }
                 
-                // Combine both datasets
-                const combinedData = [...significantPrecipitationPoints, ...sampledBackgroundPoints];
+                console.log(`🔍 DEBUG: Found ${allDataPoints.length} total data points across full grid`);
+                
+                // Analyze the geographic distribution
+                if (allDataPoints.length > 0) {
+                  const lats = allDataPoints.map(p => p.lat);
+                  const lngs = allDataPoints.map(p => p.lng);
+                  const values = allDataPoints.map(p => p.value);
+                  
+                  console.log(`🌍 Geographic distribution:`);
+                  console.log(`   Latitude: ${Math.min(...lats).toFixed(3)}° to ${Math.max(...lats).toFixed(3)}°`);
+                  console.log(`   Longitude: ${Math.min(...lngs).toFixed(3)}° to ${Math.max(...lngs).toFixed(3)}°`);
+                  console.log(`   Values: ${Math.min(...values).toFixed(1)} to ${Math.max(...values).toFixed(1)} dBZ`);
+                  
+                  // Count by value ranges
+                  const highValues = values.filter(v => v > 10).length;
+                  const mediumValues = values.filter(v => v > -10 && v <= 10).length;
+                  const lowValues = values.filter(v => v <= -10).length;
+                  
+                  console.log(`   High values (>10 dBZ): ${highValues} points`);
+                  console.log(`   Medium values (-10 to 10 dBZ): ${mediumValues} points`);
+                  console.log(`   Low values (<-10 dBZ): ${lowValues} points`);
+                }
+                
+                // Use all data points for analysis
+                const combinedData = allDataPoints;
                 
                 console.log(`✅ Successfully extracted ${combinedData.length} radar data points from real GRIB2 data`);
-                console.log(`📊 Breakdown: ${significantPrecipitationPoints.length} significant precipitation points, ${sampledBackgroundPoints.length} background points`);
+                console.log(`� DEBUGGING: Full grid systematic sampling complete`);
                 
                 if (combinedData.length > 0) {
                   // Check data distribution
