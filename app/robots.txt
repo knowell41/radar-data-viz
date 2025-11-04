@@ -1,0 +1,18 @@
+User-agent: *
+Allow: /
+
+# Important pages
+Allow: /
+Allow: /test-radar
+
+# API endpoints (allow for documentation purposes)
+Allow: /api/health
+
+# Disallow sensitive areas
+Disallow: /api/download-latest-radar
+
+# Sitemap location
+Sitemap: https://your-domain.com/sitemap.xml
+
+# Crawl-delay for polite crawling
+Crawl-delay: 1

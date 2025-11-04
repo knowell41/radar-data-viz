@@ -1,6 +1,42 @@
 import RadarVisualization from './components/RadarVisualization';
 import { Header } from './components/header';
 import Link from 'next/link';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: "Weather Radar Dashboard - Real-time NOAA MRMS Data",
+  description: "Interactive weather radar dashboard featuring real-time NOAA MRMS precipitation data, storm tracking, and advanced meteorological visualization. Access live radar imagery with 1km resolution updated every 2-5 minutes.",
+  keywords: [
+    "weather radar dashboard",
+    "real-time precipitation",
+    "NOAA MRMS data",
+    "storm tracking",
+    "live weather radar",
+    "precipitation visualization",
+    "weather monitoring",
+    "radar imagery",
+    "meteorological dashboard"
+  ],
+  openGraph: {
+    title: "Weather Radar Dashboard - Real-time NOAA MRMS Data",
+    description: "Interactive weather radar dashboard featuring real-time NOAA MRMS precipitation data, storm tracking, and advanced meteorological visualization.",
+    type: "website",
+    images: [
+      {
+        url: "/og-dashboard.png",
+        width: 1200,
+        height: 630,
+        alt: "RadarViz Pro Dashboard - Real-time Weather Radar",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Weather Radar Dashboard - Real-time NOAA MRMS Data",
+    description: "Interactive weather radar dashboard featuring real-time NOAA MRMS precipitation data and storm tracking.",
+    images: ["/twitter-dashboard.png"],
+  },
+};
 
 export default function Home() {
   return (
